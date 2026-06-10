@@ -3,25 +3,59 @@
    ============================================================ */
 /* global React, ReactDOM, SlideView, IconPicker, ImagePicker, Modal,
    SLIDE_TYPES, SLIDE_TYPE_NAME, THEME_OPTIONS, makeSlide, starterDeck,
-   defaultData, imageBg, PptxGenJS, htmlToImage */
+   defaultData, imageBg, imageSrc, PptxGenJS, htmlToImage */
 const { useState, useEffect, useRef, useCallback } = React;
 
-const LS_KEY = 'covetrus-builder-v1';
+const LS_KEY = 'covetrus-builder-v1';        // legacy single-deck key (migrated)
+const LIB_KEY = 'covetrus-builder-library-v1';
 
-/* ---------- persistence ---------- */
-function loadDeck() {
+/* ---------- persistence: a small multi-deck library ---------- */
+function readSharedDeck() {
   try {
     if (location.hash.startsWith('#d=')) {
       const json = decodeURIComponent(escape(atob(location.hash.slice(3))));
       const d = JSON.parse(json);
-      if (d && d.slides) return d;
+      if (d && Array.isArray(d.slides)) return d;
     }
   } catch (e) { /* ignore */ }
+  return null;
+}
+function loadLibrary() {
+  let lib = null;
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (raw) { const d = JSON.parse(raw); if (d && d.slides) return d; }
+    const raw = localStorage.getItem(LIB_KEY);
+    if (raw) { const p = JSON.parse(raw); if (p && p.decks && p.order && p.currentId) lib = p; }
   } catch (e) { /* ignore */ }
-  return starterDeck();
+  if (!lib) {
+    // migrate a legacy single deck, else start fresh
+    let base = null;
+    try { const raw = localStorage.getItem(LS_KEY); if (raw) { const d = JSON.parse(raw); if (d && d.slides) base = d; } } catch (e) {}
+    base = base || starterDeck();
+    const id = uid();
+    lib = { order: [id], decks: { [id]: base }, currentId: id };
+  }
+  // a shared-link deck is added as a NEW deck (never clobbers existing work)
+  const shared = readSharedDeck();
+  if (shared) {
+    const id = uid();
+    shared.title = (shared.title || 'Shared deck') + '';
+    lib.decks[id] = shared;
+    lib.order = [id, ...lib.order.filter(x => x !== id)];
+    lib.currentId = id;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  }
+  return lib;
+}
+function bumpVersionTitle(title) {
+  const m = (title || '').match(/^(.*?)(?:\s+v(\d+))?$/i);
+  if (m && m[2]) return `${m[1]} v${parseInt(m[2], 10) + 1}`;
+  return `${(title || 'Untitled deck').trim()} v2`;
+}
+function cloneDeck(deck, title) {
+  const c = JSON.parse(JSON.stringify(deck));
+  c.title = title != null ? title : c.title;
+  c.slides = c.slides.map(s => ({ ...s, id: uid() }));
+  return c;
 }
 
 /* ---------- small UI bits ---------- */
@@ -37,6 +71,24 @@ function Seg({ value, options, onChange, labels }) {
 function Field({ label, children }) {
   return <label className="field"><span className="field-lbl">{label}</span>{children}</label>;
 }
+
+/* Click-to-open dropdown menu (closes on outside click / item click) */
+function Dropdown({ label, children }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    window.addEventListener('mousedown', h);
+    return () => window.removeEventListener('mousedown', h);
+  }, [open]);
+  return (
+    <div className="menu" ref={ref}>
+      <button className={'btn ghost' + (open ? ' on' : '')} onClick={() => setOpen(o => !o)}>{label} ▾</button>
+      {open && <div className="menu-pop" onClick={() => setOpen(false)}>{children}</div>}
+    </div>
+  );
+}
 function RowList({ items, onAdd, onRemove, addLabel, min = 1, max = 99, children }) {
   return (
     <div className="rowlist">
@@ -48,6 +100,31 @@ function RowList({ items, onAdd, onRemove, addLabel, min = 1, max = 99, children
       ))}
       {items.length < max && <button className="btn ghost sm" onClick={onAdd}>+ {addLabel}</button>}
     </div>
+  );
+}
+
+/* Crop / zoom controls for a placed photo. `set` receives the updated image field. */
+function ImageAdjust({ img, set, photoLabel = 'photo' }) {
+  if (!img || !imageSrc(img)) return null;
+  const z = img.zoom || 100;
+  const px = img.posX != null ? img.posX : 50;
+  const py = img.posY != null ? img.posY : 50;
+  const upd = (k, v) => set({ ...img, [k]: v });
+  const isDefault = z === 100 && px === 50 && py === 50;
+  return (
+    <>
+      <div className="sub-h">Crop &amp; zoom</div>
+      <Field label={`Zoom · ${z}%`}>
+        <input className="range" type="range" min="100" max="250" step="1" value={z} onChange={e => upd('zoom', +e.target.value)} />
+      </Field>
+      <Field label={`Horizontal · ${px}%`}>
+        <input className="range" type="range" min="0" max="100" step="1" value={px} onChange={e => upd('posX', +e.target.value)} />
+      </Field>
+      <Field label={`Vertical · ${py}%`}>
+        <input className="range" type="range" min="0" max="100" step="1" value={py} onChange={e => upd('posY', +e.target.value)} />
+      </Field>
+      <button className="btn ghost sm" disabled={isDefault} onClick={() => set({ ...img, zoom: 100, posX: 50, posY: 50 })}>Reset crop</button>
+    </>
   );
 }
 
@@ -72,6 +149,40 @@ function Inspector({ slide, patch }) {
         </Field>
       )}
 
+      {/* Eyebrow visibility — every non-cover slide that has an eyebrow */}
+      {t !== 'cover' && ('eyebrow' in d) && (
+        <label className="chk" style={{ marginBottom: 16 }}>
+          <input type="checkbox" checked={d.showEyebrow !== false} onChange={e => setField('showEyebrow', e.target.checked)} />
+          <span>Show eyebrow</span>
+        </label>
+      )}
+
+      {/* COVER */}
+      {t === 'cover' && (
+        <>
+          <div className="sub-h">Show text</div>
+          <div className="chk-list">
+            {[['showEyebrow', 'Eyebrow'], ['showTitle', 'Title'], ['showLede', 'Summary'], ['showDate', 'Date']].map(([k, label]) => (
+              <label className="chk" key={k}>
+                <input type="checkbox" checked={d[k] !== false} onChange={e => setField(k, e.target.checked)} />
+                <span>{label}</span>
+              </label>
+            ))}
+          </div>
+          <Field label="Right panel">
+            <Seg value={d.rightArt || (imageBg(d.image) ? 'photo' : 'brand')} options={['brand', 'photo']}
+              labels={{ brand: 'Brand mark', photo: 'Lifestyle image' }}
+              onChange={(v) => setField('rightArt', v)} />
+          </Field>
+          {(d.rightArt || (imageBg(d.image) ? 'photo' : 'brand')) === 'photo' && (
+            <div className="hint-row">Click the right panel on the slide to choose or replace the photo.</div>
+          )}
+          {(d.rightArt || (imageBg(d.image) ? 'photo' : 'brand')) === 'photo' && (
+            <ImageAdjust img={d.image} set={(img) => setField('image', img)} />
+          )}
+        </>
+      )}
+
       {/* AGENDA */}
       {t === 'agenda' && (
         <RowList items={d.items} addLabel="Add item" min={1} max={8}
@@ -83,12 +194,17 @@ function Inspector({ slide, patch }) {
 
       {/* DIVIDER */}
       {t === 'divider' && (
-        <Field label="Section number"><input className="inp" value={d.sectionNum} onChange={e => setField('sectionNum', e.target.value)} /></Field>
+        <>
+          <Field label="Section number"><input className="inp" value={d.sectionNum} onChange={e => setField('sectionNum', e.target.value)} /></Field>
+          {imageSrc(d.image)
+            ? <ImageAdjust img={d.image} set={(img) => setField('image', img)} />
+            : <div className="hint-row">Click the right panel on the slide to add a section photo.</div>}
+        </>
       )}
 
       {/* PILLARS */}
       {t === 'pillars' && (
-        <RowList items={d.items} addLabel="Add pillar" min={1} max={3}
+        <RowList items={d.items} addLabel="Add pillar" min={1} max={6}
           onAdd={() => setArr('items', [...d.items, { icon: 'cs-star', title: 'New pillar', body: 'Short description of this pillar.', tag: 'Tag · Tag' }])}
           onRemove={(i) => setArr('items', d.items.filter((_, j) => j !== i))}>
           {(i) => <div className="rl-name">{d.items[i].title}</div>}
@@ -161,47 +277,118 @@ function Inspector({ slide, patch }) {
 
       {/* MOCKUP */}
       {t === 'mockup' && (
-        <RowList items={d.list} addLabel="Add point" min={1} max={6}
-          onAdd={() => setArr('list', [...d.list, { lead: 'New point', rest: ' — detail.' }])}
-          onRemove={(i) => setArr('list', d.list.filter((_, j) => j !== i))}>
-          {(i) => <div className="rl-name">{d.list[i].lead}</div>}
-        </RowList>
-      )}
-
-      {/* COMPARISON */}
-      {t === 'comparison' && (
         <>
-          <Field label="Highlight column">
-            <Seg value={String(d.highlightCol)} options={d.columns.slice(1).map((_, i) => String(i + 1))}
-              labels={Object.fromEntries(d.columns.slice(1).map((c, i) => [String(i + 1), c]))}
-              onChange={(v) => setField('highlightCol', +v)} />
-          </Field>
-          <Field label="Highlight badge"><input className="inp" value={d.highlightPill} onChange={e => setField('highlightPill', e.target.value)} /></Field>
-          <div className="hint-row">Tip: type ✓ or — in a cell for a check / dash mark.</div>
-          <RowList items={d.rows} addLabel="Add row" min={1} max={8}
-            onAdd={() => setArr('rows', [...d.rows, d.columns.map((_, i) => i === 0 ? 'New capability' : '—')])}
-            onRemove={(i) => setArr('rows', d.rows.filter((_, j) => j !== i))}>
-            {(i) => <div className="rl-name">{d.rows[i][0]}</div>}
+          <div className="hint-row">Click the screen on the slide to upload or replace your screenshot.</div>
+          <div className="sub-h">Bullet points</div>
+          <RowList items={d.list} addLabel="Add point" min={1} max={6}
+            onAdd={() => setArr('list', [...d.list, { lead: 'New point', rest: ' — detail.' }])}
+            onRemove={(i) => setArr('list', d.list.filter((_, j) => j !== i))}>
+            {(i) => <div className="rl-name">{d.list[i].lead}</div>}
           </RowList>
         </>
       )}
 
+      {/* COMPARISON */}
+      {t === 'comparison' && (() => {
+        const hlSet = new Set(Array.isArray(d.highlightCols) ? d.highlightCols : (d.highlightCol >= 1 ? [d.highlightCol] : []));
+        const badgesArr = () => Array.isArray(d.badges) ? d.badges : d.columns.map((_, i) => (i === d.highlightCol ? (d.highlightPill || '') : ''));
+        const setColName = (col, v) => patch(dd => ({ ...dd, columns: dd.columns.map((c, i) => i === col ? v : c) }));
+        const toggleHl = (col) => patch(dd => {
+          const cur = Array.isArray(dd.highlightCols) ? dd.highlightCols : (dd.highlightCol >= 1 ? [dd.highlightCol] : []);
+          const next = cur.includes(col) ? cur.filter(c => c !== col) : [...cur, col].sort((a, b) => a - b);
+          return { ...dd, highlightCols: next };
+        });
+        const setBadge = (col, v) => patch(dd => {
+          const arr = Array.isArray(dd.badges) ? dd.badges.slice() : dd.columns.map((_, i) => (i === dd.highlightCol ? (dd.highlightPill || '') : ''));
+          arr[col] = v;
+          return { ...dd, badges: arr };
+        });
+        const addCol = () => patch(dd => {
+          const columns = [...dd.columns, 'New'];
+          const rows = dd.rows.map(r => [...r, '—']);
+          const badges = (Array.isArray(dd.badges) ? dd.badges.slice() : dd.columns.map((_, i) => (i === dd.highlightCol ? (dd.highlightPill || '') : '')));
+          badges.push('');
+          return { ...dd, columns, rows, badges };
+        });
+        const removeCol = (col) => patch(dd => {
+          const columns = dd.columns.filter((_, i) => i !== col);
+          const rows = dd.rows.map(r => r.filter((_, i) => i !== col));
+          const oldBadges = (Array.isArray(dd.badges) ? dd.badges : dd.columns.map((_, i) => (i === dd.highlightCol ? (dd.highlightPill || '') : '')));
+          const badges = oldBadges.filter((_, i) => i !== col);
+          const cur = Array.isArray(dd.highlightCols) ? dd.highlightCols : (dd.highlightCol >= 1 ? [dd.highlightCol] : []);
+          const highlightCols = cur.filter(c => c !== col).map(c => (c > col ? c - 1 : c));
+          return { ...dd, columns, rows, badges, highlightCols };
+        });
+        return (
+          <>
+            <div className="sub-h">Columns</div>
+            <div className="hint-row">Toggle “Highlight” on any columns to emphasize them — turn all off for none. The first column (row labels) is edited on the slide.</div>
+            <RowList items={d.columns.slice(1)} addLabel="Add column" min={1} max={5}
+              onAdd={addCol} onRemove={(i) => removeCol(i + 1)}>
+              {(i) => {
+                const col = i + 1;
+                const on = hlSet.has(col);
+                return (
+                  <div>
+                    <input className="inp xs" value={d.columns[col]} onChange={e => setColName(col, e.target.value)} placeholder="Column name" />
+                    <label className="chk" style={{ marginTop: 8 }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleHl(col)} />
+                      <span>Highlight</span>
+                    </label>
+                    {on && (
+                      <input className="inp xs" style={{ marginTop: 8 }} value={badgesArr()[col] || ''} onChange={e => setBadge(col, e.target.value)} placeholder="Badge (optional)" />
+                    )}
+                  </div>
+                );
+              }}
+            </RowList>
+            <div className="sub-h">Rows</div>
+            <div className="hint-row">Tip: type ✓ or — in a cell for a check / dash mark.</div>
+            <RowList items={d.rows} addLabel="Add row" min={1} max={8}
+              onAdd={() => setArr('rows', [...d.rows, d.columns.map((_, i) => i === 0 ? 'New capability' : '—')])}
+              onRemove={(i) => setArr('rows', d.rows.filter((_, j) => j !== i))}>
+              {(i) => <div className="rl-name">{d.rows[i][0]}</div>}
+            </RowList>
+          </>
+        );
+      })()}
+
       {/* TEAM */}
       {t === 'team' && (
-        <RowList items={d.members} addLabel="Add person" min={1} max={4}
+        <RowList items={d.members} addLabel="Add person" min={1} max={6}
           onAdd={() => setArr('members', [...d.members, { initials: 'NN', role: 'Role', name: 'New name', bio: 'Short bio.', image: { kind: 'none' } }])}
           onRemove={(i) => setArr('members', d.members.filter((_, j) => j !== i))}>
-          {(i) => <div className="rl-name">{d.members[i].name}</div>}
+          {(i) => (
+            <div>
+              <div className="rl-name">{d.members[i].name}</div>
+              {imageSrc(d.members[i].image)
+                ? <ImageAdjust img={d.members[i].image} set={(img) => setArr('members', d.members.map((m, j) => j === i ? { ...m, image: img } : m))} />
+                : <div className="hint-row">Click the photo on the slide to add an image.</div>}
+            </div>
+          )}
         </RowList>
       )}
 
       {/* CLOSING */}
       {t === 'closing' && (
-        <RowList items={d.steps} addLabel="Add action" min={1} max={5}
-          onAdd={() => setArr('steps', [...d.steps, { text: 'New action item.', meta: 'Owner · Date' }])}
-          onRemove={(i) => setArr('steps', d.steps.filter((_, j) => j !== i))}>
-          {(i) => <div className="rl-name">{d.steps[i].text}</div>}
-        </RowList>
+        <>
+          <RowList items={d.steps} addLabel="Add action" min={1} max={5}
+            onAdd={() => setArr('steps', [...d.steps, { text: 'New action item.', meta: 'Owner · Date' }])}
+            onRemove={(i) => setArr('steps', d.steps.filter((_, j) => j !== i))}>
+            {(i) => <div className="rl-name">{d.steps[i].text}</div>}
+          </RowList>
+          <Field label="Right panel">
+            <Seg value={d.rightArt || (imageSrc(d.image) ? 'photo' : 'brand')} options={['brand', 'photo']}
+              labels={{ brand: 'Brand mark', photo: 'Image' }}
+              onChange={(v) => setField('rightArt', v)} />
+          </Field>
+          {(d.rightArt || (imageSrc(d.image) ? 'photo' : 'brand')) === 'photo' && (
+            <div className="hint-row">Click the right panel on the slide to choose or replace the image.</div>
+          )}
+          {(d.rightArt || (imageSrc(d.image) ? 'photo' : 'brand')) === 'photo' && (
+            <ImageAdjust img={d.image} set={(img) => setField('image', img)} />
+          )}
+        </>
       )}
 
       <div className="insp-tip">Click any text on the slide to edit it. Click icons or image areas to swap them.</div>
@@ -288,7 +475,7 @@ function MiniSlide({ slide, w = 240 }) {
    Main App
    ============================================================ */
 function App() {
-  const [deck, setDeck] = useState(loadDeck);
+  const [lib, setLib] = useState(loadLibrary);
   const [sel, setSel] = useState(0);
   const [adding, setAdding] = useState(false);
   const [present, setPresent] = useState(false);
@@ -298,11 +485,22 @@ function App() {
   const [toast, setToast] = useState('');
   const canvasRef = useRef(null);
   const printRef = useRef(null);
+  const openRef = useRef(null);
+  const [dirty, setDirty] = useState(false);   // unsaved-to-file changes in current deck
 
-  // autosave
+  const currentId = lib.currentId;
+  const deck = lib.decks[currentId];
+  // setDeck keeps its old signature (value or updater fn) but writes into the library
+  const setDeck = (updater) => { setDirty(true); setLib(L => {
+    const curDeck = L.decks[L.currentId];
+    const next = typeof updater === 'function' ? updater(curDeck) : updater;
+    return { ...L, decks: { ...L.decks, [L.currentId]: next } };
+  }); };
+
+  // autosave whole library
   useEffect(() => {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(deck)); } catch (e) {}
-  }, [deck]);
+    try { localStorage.setItem(LIB_KEY, JSON.stringify(lib)); } catch (e) {}
+  }, [lib]);
 
   // fit canvas
   useEffect(() => {
@@ -349,6 +547,65 @@ function App() {
   const requestIcon = (current, apply) => setPicker({ kind: 'icon', apply });
   const requestImage = (current, apply, allowNone) => setPicker({ kind: 'image', apply, allowNone });
 
+  // ---- deck library management ----
+  const addDeckToLib = (newDeck, { front = true } = {}) => {
+    const id = uid();
+    setLib(L => ({
+      order: front ? [id, ...L.order] : [...L.order, id],
+      decks: { ...L.decks, [id]: newDeck },
+      currentId: id,
+    }));
+    setSel(0); setDirty(true);
+    return id;
+  };
+  const newDeck = () => { addDeckToLib({ ...starterDeck(), title: 'Untitled deck' }); flash('New deck created'); };
+  const duplicateDeck = () => { addDeckToLib(cloneDeck(deck, bumpVersionTitle(deck.title))); flash('Duplicated as “' + bumpVersionTitle(deck.title) + '”'); };
+  const switchDeck = (id) => { if (id !== currentId) { setLib(L => ({ ...L, currentId: id })); setSel(0); setDirty(false); } };
+  const deleteDeck = (id) => {
+    setLib(L => {
+      const order = L.order.filter(x => x !== id);
+      const decks = { ...L.decks }; delete decks[id];
+      if (order.length === 0) { const nid = uid(); return { order: [nid], decks: { [nid]: { ...starterDeck(), title: 'Untitled deck' } }, currentId: nid }; }
+      const currentId = L.currentId === id ? order[0] : L.currentId;
+      return { order, decks, currentId };
+    });
+    setSel(0);
+  };
+
+  // save deck to a .covdeck file (perfect round-trip)
+  const saveDeck = () => {
+    try {
+      const payload = JSON.stringify({ format: 'covdeck', version: 1, deck }, null, 0);
+      const blob = new Blob([payload], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safe = (deck.title || 'Covetrus deck').replace(/[^\w\- ]+/g, '').trim() || 'Covetrus deck';
+      a.href = url; a.download = safe + '.covdeck';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setDirty(false);
+      flash('Deck saved — reopen it any time with Open deck');
+    } catch (e) { flash('Could not save deck'); }
+  };
+
+  // open a .covdeck file — adds it as a NEW deck (won't overwrite your work)
+  const openDeckFile = (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const parsed = JSON.parse(r.result);
+        const d = parsed && parsed.deck ? parsed.deck : parsed; // accept raw deck too
+        if (!d || !Array.isArray(d.slides) || !d.slides.length) throw new Error('Not a deck file');
+        addDeckToLib(d);
+        flash('Deck opened — “' + (d.title || 'Untitled') + '”');
+      } catch (err) { flash('That file isn’t a valid .covdeck deck'); }
+    };
+    r.readAsText(f);
+  };
+
   // share link
   const shareLink = () => {
     try {
@@ -394,15 +651,35 @@ function App() {
         <span className="tb-div" />
         <input className="tb-title" value={deck.title} onChange={e => setDeck(d => ({ ...d, title: e.target.value }))} spellCheck={false} />
         <span className="tb-meta">{slides.length} slides · saved locally</span>
+        {dirty && <button className="save-nudge" onClick={saveDeck} title="Download a .covdeck backup file">● Save deck</button>}
         <div className="tb-actions">
-          <button className="btn ghost" onClick={shareLink}>Share link</button>
-          <div className="menu">
-            <button className="btn ghost">Export ▾</button>
-            <div className="menu-pop">
-              <button onClick={exportPPTX}>PowerPoint (.pptx)</button>
-              <button onClick={exportPDF}>PDF (print)</button>
+          <Dropdown label="Deck">
+            <button onClick={newDeck}>New deck</button>
+            <button onClick={duplicateDeck}>Duplicate this deck</button>
+            <div className="menu-sep" />
+            <div className="menu-label">Your decks ({lib.order.length})</div>
+            <div className="deck-switch">
+              {lib.order.map(id => (
+                <div key={id} className={'deck-row' + (id === currentId ? ' on' : '')}>
+                  <button className="deck-pick" onClick={() => switchDeck(id)}>
+                    <span className="deck-dot">{id === currentId ? '●' : '○'}</span>
+                    <span className="deck-name">{lib.decks[id].title || 'Untitled'}</span>
+                    <span className="deck-ct">{lib.decks[id].slides.length}</span>
+                  </button>
+                  <button className="deck-del" title="Delete deck"
+                    onClick={(e) => { e.stopPropagation(); if (confirm('Delete “' + (lib.decks[id].title || 'Untitled') + '”? This can\u2019t be undone.')) deleteDeck(id); }}>✕</button>
+                </div>
+              ))}
             </div>
-          </div>
+            <div className="menu-sep" />
+            <button onClick={saveDeck}>Save deck to file (.covdeck)</button>
+            <button onClick={() => openRef.current && openRef.current.click()}>Open deck from file…</button>
+            <button onClick={shareLink}>Copy share link</button>
+          </Dropdown>
+          <Dropdown label="Export">
+            <button onClick={exportPPTX}>PowerPoint (.pptx)</button>
+            <button onClick={exportPDF}>PDF (print)</button>
+          </Dropdown>
           <button className="btn primary" onClick={() => setPresent(true)}>▶ Present</button>
         </div>
       </header>
@@ -459,6 +736,7 @@ function App() {
 
       {exporting && <div className="overlay-msg"><div className="spinner" />{exporting}</div>}
       {toast && <div className="toast">{toast}</div>}
+      <input ref={openRef} type="file" accept=".covdeck,application/json" hidden onChange={openDeckFile} />
     </div>
   );
 }

@@ -40,24 +40,35 @@ const ICON_LIBRARY = [
 ];
 const ICON_SRC = (name) => `assets/icons/${name}-black-teal.svg`;
 
-// ---- Image library (curated on-brand placeholders) ----
-// value = a CSS background. kind 'preset' uses css, 'upload' uses url(dataURL).
+// ---- Image library (real on-brand photography) ----
+// kind 'preset' uses a url() background (value); kind 'upload' uses a dataURL.
 const IMAGE_LIBRARY = [
-  { id: 'care',     label: 'Veterinary care',  css: 'linear-gradient(135deg,#021660,#0a2480 55%,#27BDBE)' },
-  { id: 'team',     label: 'Care team',         css: 'linear-gradient(160deg,#0a2480,#021660 60%,#011040)' },
-  { id: 'tech',     label: 'Technology',        css: 'linear-gradient(135deg,#021660 40%,#27BDBE)' },
-  { id: 'pharmacy', label: 'Pharmacy',          css: 'radial-gradient(circle at 30% 25%,#27BDBE,transparent 55%),linear-gradient(135deg,#021660,#0a2480)' },
-  { id: 'clinic',   label: 'Clinic',            css: 'linear-gradient(120deg,#75C1FF,#0055E7 70%,#021660)' },
-  { id: 'pets',     label: 'Pets',              css: 'radial-gradient(circle at 70% 30%,#27BDBE,transparent 50%),linear-gradient(160deg,#0a2480,#021660)' },
-  { id: 'growth',   label: 'Growth',            css: 'linear-gradient(135deg,#008556,#27BDBE 70%,#021660)' },
-  { id: 'abstract', label: 'Abstract teal',     css: 'conic-gradient(from 200deg at 60% 40%,#021660,#27BDBE,#0a2480,#021660)' },
+  { id: 'vet-cat',    label: 'Veterinary care', src: 'assets/photos/vet-cat.jpg' },
+  { id: 'clinic-dog', label: 'In the clinic',    src: 'assets/photos/clinic-dog.jpg' },
+  { id: 'vet-exam',   label: 'Vet exam',         src: 'assets/photos/vet-exam.jpg' },
+  { id: 'home-cat',   label: 'Pet parent',       src: 'assets/photos/home-cat.jpg' },
+  { id: 'home-dog',   label: 'At home',          src: 'assets/photos/home-dog.jpg' },
+  { id: 'work-cat',   label: 'Working from home', src: 'assets/photos/work-cat.jpg' },
 ];
 
-// Resolve an image field {kind,value} -> CSS background string (or null)
+// Resolve an image field -> CSS background string (or null). Handles new {src}
+// shape and legacy {value} (gradient css or url()).
 function imageBg(img) {
   if (!img || img.kind === 'none') return null;
+  if (img.src) return `url("${img.src}")`;
   if (img.kind === 'upload') return `url("${img.value}")`;
-  return img.value; // preset css
+  return img.value; // legacy preset css
+}
+
+// Resolve an image field -> a raw image URL usable in <img src> (or null).
+// Returns null for legacy gradient presets that have no real image.
+function imageSrc(img) {
+  if (!img || img.kind === 'none') return null;
+  if (img.src) return img.src;
+  if (img.kind === 'upload') return img.value; // legacy dataURL
+  const v = img.value || '';
+  const m = v.match(/^url\(["']?(.*?)["']?\)$/);
+  return m ? m[1] : null;
 }
 
 // ---- Slide type catalog ----
@@ -65,12 +76,11 @@ const SLIDE_TYPES = [
   { type: 'cover',      name: 'Title cover',        group: 'Open',    hint: 'Big title, subtitle, author + date' },
   { type: 'agenda',     name: 'Agenda',             group: 'Open',    hint: 'Numbered list of what you\u2019ll cover' },
   { type: 'divider',    name: 'Section divider',    group: 'Open',    hint: 'Section break with image or number' },
-  { type: 'pillars',    name: 'Three pillars',      group: 'Content', hint: 'Three icon cards, short text' },
-  { type: 'summary',    name: 'Executive summary',  group: 'Content', hint: 'Long-form, two-column body' },
+  { type: 'pillars',    name: 'Pillars',            group: 'Content', hint: 'Three icon cards, short text' },
   { type: 'mockup',     name: 'Product mockup',     group: 'Content', hint: 'Talking points beside a UI mockup' },
   { type: 'quote',      name: 'Quote',              group: 'Content', hint: 'Pull quote with attribution' },
   { type: 'barchart',   name: 'Bar chart',          group: 'Data',    hint: 'Grouped bars + side KPIs' },
-  { type: 'kpi',        name: 'KPI dashboard',      group: 'Data',    hint: 'Four metric cards + trend line' },
+  { type: 'kpi',        name: 'Dashboard',          group: 'Data',    hint: 'Four metric cards + trend line' },
   { type: 'timeline',   name: 'Timeline',           group: 'Data',    hint: 'Milestones along a rail' },
   { type: 'comparison', name: 'Comparison table',   group: 'Data',    hint: 'Plans / options side by side' },
   { type: 'team',       name: 'Team',               group: 'Close',   hint: 'People grid with roles' },
@@ -80,18 +90,18 @@ const SLIDE_TYPE_NAME = Object.fromEntries(SLIDE_TYPES.map(s => [s.type, s.name]
 
 // Which themes each type allows in the theme toggle
 const THEME_OPTIONS = {
-  cover: ['light'],
-  agenda: ['light', 'muted', 'navy'],
+  cover: ['light', 'navy'],
+  agenda: ['light', 'navy'],
   divider: ['navy'],
-  pillars: ['light', 'muted', 'navy'],
-  summary: ['light', 'muted', 'navy'],
-  mockup: ['light', 'muted'],
+  pillars: ['light', 'navy'],
+  summary: ['light', 'navy'],
+  mockup: ['light', 'navy'],
   quote: ['navy', 'light'],
-  barchart: ['light', 'muted', 'navy'],
-  kpi: ['light', 'muted', 'navy'],
-  timeline: ['light', 'muted', 'navy'],
-  comparison: ['light', 'muted', 'navy'],
-  team: ['light', 'muted', 'navy'],
+  barchart: ['light', 'navy'],
+  kpi: ['light', 'navy'],
+  timeline: ['light', 'navy'],
+  comparison: ['light', 'navy'],
+  team: ['light', 'navy'],
   closing: ['navy'],
 };
 
@@ -102,12 +112,13 @@ const uid = () => `s${Date.now().toString(36)}${(__uid++).toString(36)}`;
 function defaultData(type) {
   switch (type) {
     case 'cover': return {
-      theme: 'light',
+      theme: 'navy',
       eyebrow: 'Q2 2026 Business Review',
       title: 'Presentation title goes here in two lines.',
       lede: 'A short, plain-language summary of what this deck covers — written for the audience who will see it.',
       author: 'Author name', authorMeta: 'Team or department',
-      dateMeta: 'May 12, 2026 · Internal',
+      dateMeta: 'May 12, 2026',
+      rightArt: 'brand',
       image: { kind: 'none' },
     };
     case 'agenda': return {
@@ -154,6 +165,8 @@ function defaultData(type) {
         { lead: 'One-click exports', rest: ' for board meetings and owner reviews.' },
         { lead: 'Native to Pulse', rest: ' — no extra logins, no data uploads.' },
       ],
+      mockUrl: 'covetrus.com/mockup',
+      screenImage: { kind: 'none' },
     };
     case 'quote': return {
       theme: 'navy',
@@ -187,6 +200,8 @@ function defaultData(type) {
       ],
       trendHead: 'Trailing twelve months', trendSub: 'Monthly recurring revenue, all segments combined.',
       trend: [108,98,104,86,82,70,74,58,52,38,32,24,12],
+      trendStartVal: '$1.8M', trendEndVal: '$3.4M',
+      trendStartPeriod: 'Jul 2025', trendEndPeriod: 'Jun 2026',
     };
     case 'timeline': return {
       theme: 'light', eyebrow: 'Roadmap', title: 'The next two quarters.',
@@ -201,7 +216,7 @@ function defaultData(type) {
     case 'comparison': return {
       theme: 'light', eyebrow: 'How we compare', title: 'Plans, side by side.',
       columns: ['Capability', 'Essentials', 'Pulse', 'Enterprise'],
-      highlightCol: 2, highlightPill: 'Most popular',
+      highlightCols: [2], badges: ['', '', 'Most popular', ''],
       rows: [
         ['Scheduling and records', '✓', '✓', '✓'],
         ['Rx + home delivery', 'Limited', '✓', '✓'],
@@ -228,6 +243,8 @@ function defaultData(type) {
         { text: 'Confirm staffing for the VetSuite refresh.', meta: 'Owner: Mateo · By: May 26' },
         { text: 'Approve the customer-advisory roster.', meta: 'Owner: Devon · By: Jun 02' },
       ],
+      rightArt: 'brand',
+      image: { kind: 'none' },
     };
     default: return {};
   }
@@ -239,12 +256,12 @@ function makeSlide(type) {
 
 // Starter deck — the original 13-slide template, in order
 function starterDeck() {
-  const order = ['cover','agenda','divider','pillars','summary','barchart','kpi','timeline','mockup','quote','comparison','team','closing'];
+  const order = ['cover','agenda','divider','pillars','barchart','kpi','timeline','mockup','quote','comparison','team','closing'];
   return { title: 'Untitled deck', slides: order.map(makeSlide) };
 }
 
 Object.assign(window, {
-  ICON_LIBRARY, ICON_SRC, IMAGE_LIBRARY, imageBg,
+  ICON_LIBRARY, ICON_SRC, IMAGE_LIBRARY, imageBg, imageSrc,
   SLIDE_TYPES, SLIDE_TYPE_NAME, THEME_OPTIONS,
   defaultData, makeSlide, starterDeck, uid,
 });

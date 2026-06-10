@@ -2,7 +2,7 @@
    slides.jsx — renders any slide type. editable=true wires
    inline text editing + click-to-swap icons/images.
    ============================================================ */
-/* global React, Editable, ICON_SRC, imageBg */
+/* global React, Editable, ICON_SRC, imageBg, imageSrc */
 
 function getIn(obj, path) { return path.reduce((o, k) => (o == null ? o : o[k]), obj); }
 function setIn(obj, path, val) {
@@ -20,6 +20,20 @@ function setIn(obj, path, val) {
 const LOGO = 'assets/logos/Covetrus_RGB.svg';
 const LOGO_KO = 'assets/logos/Covetrus_RGB_KO.svg';
 const BUG_KO = 'assets/logos/Covetrus_Bug_RGB_KO.svg';
+
+/* A cropped/zoomable photo that fills its (relative, overflow-hidden) parent.
+   Reads focal point (posX/posY) + zoom from the image field. */
+function PhotoLayer({ img }) {
+  const src = imageSrc(img);
+  if (!src) return null;
+  const zoom = (img && img.zoom ? img.zoom : 100) / 100;
+  const px = img && img.posX != null ? img.posX : 50;
+  const py = img && img.posY != null ? img.posY : 50;
+  return (
+    <img className="photo-layer" src={src} alt=""
+      style={{ objectPosition: `${px}% ${py}%`, transform: `scale(${zoom})`, transformOrigin: `${px}% ${py}%` }} />
+  );
+}
 
 function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageNum, total }) {
   const data = slide.data;
@@ -45,7 +59,8 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
   const Footer = () => (
     <div className="footer-bar">
       <img className="brand-mark" src={theme === 'navy' ? LOGO_KO : LOGO} alt="Covetrus" />
-      <div className="meta"><span>Internal</span><span className="sep" /><span className="page-num">{String(pageNum).padStart(2, '0')} / {String(total).padStart(2, '0')}</span></div>
+      <span className="confidential">Proprietary &amp; Confidential. ©2026</span>
+      <div className="meta"><span className="page-num">{pageNum}</span></div>
     </div>
   );
 
@@ -54,26 +69,56 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
   switch (slide.type) {
     /* ---------------- COVER ---------------- */
     case 'cover': {
-      const bg = imageBg(data.image);
+      const photo = imageSrc(data.image);
+      const rightArt = data.rightArt || (photo ? 'photo' : 'brand');
+      const showPhoto = rightArt === 'photo';
+      const brandRight = (
+        <div className="cover-right">
+          {Glow({ top: -200, right: -200 })}{Glow({ bottom: -300, left: -200, width: 600, height: 600 })}
+          <img className="bug" src={BUG_KO} alt="" />
+        </div>
+      );
+      let right;
+      if (showPhoto && photo) {
+        right = (
+          <div className={'cover-right has-photo' + pkCls}
+            onClick={() => pickImage(['image'])} title={editable ? 'Click to change the image' : undefined}>
+            <PhotoLayer img={data.image} />
+          </div>
+        );
+      } else if (showPhoto && editable) {
+        right = (
+          <div className={'cover-right photo-empty' + pkCls} onClick={() => pickImage(['image'])} title="Click to add a lifestyle image">
+            <div className="photo-ph">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <circle cx="8.5" cy="9.5" r="1.8" />
+                <path d="M21 16l-5-5L5 20" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span>Add a lifestyle image</span>
+            </div>
+          </div>
+        );
+      } else {
+        right = brandRight;
+      }
       return (
         <div className={rootCls}>
           <div className="cover">
             <div className="cover-left">
-              <img className="cover-logo" src={LOGO} alt="Covetrus" />
+              <img className="cover-logo" src={theme === 'navy' ? LOGO_KO : LOGO} alt="Covetrus" />
               <div>
-                {T(['eyebrow'], { className: 'eyebrow' })}
-                {T(['title'], { tag: 'h1', className: 'display', multiline: true })}
-                {T(['lede'], { className: 'lede', multiline: true })}
+                {data.showEyebrow !== false && T(['eyebrow'], { className: 'eyebrow' })}
+                {data.showTitle !== false && T(['title'], { tag: 'h1', className: 'display', multiline: true })}
+                {data.showLede !== false && T(['lede'], { className: 'lede', multiline: true })}
               </div>
-              <div className="meta-row">
-                <div>{T(['author'], { tag: 'span', className: 'mr-strong', style: { color: 'var(--navy)', fontWeight: 800 } })} {T(['authorMeta'], { tag: 'span', style: { display: 'inline' } })}</div>
-                {T(['dateMeta'])}
-              </div>
+              {data.showDate !== false && (
+                <div className="meta-row">
+                  {T(['dateMeta'])}
+                </div>
+              )}
             </div>
-            <div className={'cover-right' + (bg ? ' has-photo' : '') + pkCls} style={bg ? { backgroundImage: bg } : null}
-              onClick={() => pickImage(['image'])} title={editable ? 'Click to set a cover image' : undefined}>
-              {!bg && <>{Glow({ top: -200, right: -200 })}{Glow({ bottom: -300, left: -200, width: 600, height: 600 })}<img className="bug" src={BUG_KO} alt="" /></>}
-            </div>
+            {right}
           </div>
         </div>
       );
@@ -83,7 +128,7 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
     case 'agenda':
       return (
         <div className={rootCls}><div className="slide-pad flex-start">
-          {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+          {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
           {T(['title'], { tag: 'h2', className: 'title' })}
           <div className="agenda-grid">
             {data.items.map((it, i) => (
@@ -102,16 +147,16 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
 
     /* ---------------- DIVIDER ---------------- */
     case 'divider': {
-      const bg = imageBg(data.image);
+      const photo = imageSrc(data.image);
       return (
         <div className={rootCls}><div className="divider">
           <div className="divider-left">
-            {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+            {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
             {T(['title'], { tag: 'h2', className: 'section-title', multiline: true })}
           </div>
-          <div className={'divider-right' + (bg ? ' has-photo' : '') + pkCls} style={bg ? { backgroundImage: bg } : null}
+          <div className={'divider-right' + (photo ? ' has-photo' : '') + pkCls}
             onClick={() => pickImage(['image'])} title={editable ? 'Click to set a section image' : undefined}>
-            {!bg && <>{Glow({ top: -200, right: -200 })}{Glow({ bottom: -200, left: -200 })}
+            {photo ? <PhotoLayer img={data.image} /> : <>{Glow({ top: -200, right: -200 })}{Glow({ bottom: -200, left: -200 })}
               <div className="section-num">{editable
                 ? <Editable value={data.sectionNum} onChange={(v) => set(['sectionNum'], v)} tag="span" />
                 : data.sectionNum}</div></>}
@@ -124,9 +169,9 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
     case 'pillars':
       return (
         <div className={rootCls}><div className="slide-pad flex-start">
-          {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+          {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
           {T(['title'], { tag: 'h2', className: 'title' })}
-          <div className="pillar-grid">
+          <div className="pillar-grid" data-count={data.items.length}>
             {data.items.map((it, i) => (
               <article className="pillar" key={i}>
                 <div className={'icon-wrap' + pkCls} onClick={() => pickIcon(['items', i, 'icon'])} title={editable ? 'Click to change icon' : undefined}>
@@ -146,7 +191,7 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
     case 'summary':
       return (
         <div className={rootCls}><div className="slide-pad flex-start">
-          {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+          {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
           {T(['title'], { tag: 'h2', className: 'title' })}
           <div className="longform">
             <div className="lf-side">
@@ -166,14 +211,14 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
       const maxV = Math.max(...data.bars.flatMap(b => [Number(b.a) || 0, Number(b.b) || 0]), 1);
       return (
         <div className={rootCls}><div className="slide-pad flex-start">
-          {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+          {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
           {T(['title'], { tag: 'h2', className: 'title' })}
           <div className="chart-layout">
             <div className="chart-card">
               <div className="ch-head">
                 {T(['chartTitle'], { className: 'ch-title' })}
                 <div className="ch-legend">
-                  <span><span className="dot" style={{ background: 'var(--navy)' }} />{editable ? <Editable tag="span" value={data.seriesA} onChange={v => set(['seriesA'], v)} /> : data.seriesA}</span>
+                  <span><span className="dot" style={{ background: '#0055E7' }} />{editable ? <Editable tag="span" value={data.seriesA} onChange={v => set(['seriesA'], v)} /> : data.seriesA}</span>
                   <span><span className="dot" style={{ background: 'var(--teal)' }} />{editable ? <Editable tag="span" value={data.seriesB} onChange={v => set(['seriesB'], v)} /> : data.seriesB}</span>
                 </div>
               </div>
@@ -212,9 +257,15 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
       const line = coords.map((c, i) => (i ? 'L' : 'M') + c[0].toFixed(0) + ',' + c[1].toFixed(0)).join(' ');
       const area = line + ` L800,140 L0,140 Z`;
       const last = coords[coords.length - 1] || [800, 12];
+      const first = coords[0] || [0, 140];
+      const pct = (c) => ({ left: (c[0] / 800 * 100) + '%', top: (c[1] / 140 * 100) + '%' });
+      const tStartVal = data.trendStartVal ?? '$1.8M';
+      const tEndVal = data.trendEndVal ?? '$3.4M';
+      const tStartPer = data.trendStartPeriod ?? 'Jul 2025';
+      const tEndPer = data.trendEndPeriod ?? 'Jun 2026';
       return (
         <div className={rootCls}><div className="slide-pad flex-start">
-          {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+          {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
           {T(['title'], { tag: 'h2', className: 'title' })}
           <div className="kpi-grid">
             {data.cards.map((c, i) => (
@@ -225,18 +276,32 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
               </div>
             ))}
           </div>
-          <div className="trend-block">
+          <div className="trend-block size-fill">
             <div className="tb-head">
               {T(['trendHead'], { className: 'h3' })}
               {T(['trendSub'], { tag: 'p', multiline: true })}
             </div>
-            <svg className="trend-svg" viewBox="0 0 800 140" preserveAspectRatio="none" aria-hidden="true">
-              <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#27BDBE" stopOpacity="0.35" /><stop offset="100%" stopColor="#27BDBE" stopOpacity="0" /></linearGradient></defs>
-              <path d={area} fill="url(#tg)" />
-              <path d={line} stroke="#27BDBE" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx={last[0]} cy={last[1]} r="6" fill="#27BDBE" />
-              <circle cx={last[0]} cy={last[1]} r="11" fill="#27BDBE" fillOpacity="0.25" />
-            </svg>
+            <div className="trend-chart">
+              <div className="tc-plot">
+                <svg className="trend-svg" viewBox="0 0 800 140" preserveAspectRatio="none" aria-hidden="true">
+                  <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#27BDBE" stopOpacity="0.35" /><stop offset="100%" stopColor="#27BDBE" stopOpacity="0" /></linearGradient></defs>
+                  <path d={area} fill="url(#tg)" />
+                  <path d={line} stroke="#27BDBE" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  <circle cx={last[0]} cy={last[1]} r="6" fill="#27BDBE" />
+                  <circle cx={last[0]} cy={last[1]} r="11" fill="#27BDBE" fillOpacity="0.25" />
+                </svg>
+                <span className="tc-val tc-start" style={pct(first)}>
+                  {editable ? <Editable tag="span" value={tStartVal} onChange={v => set(['trendStartVal'], v)} /> : tStartVal}
+                </span>
+                <span className="tc-val tc-end" style={pct(last)}>
+                  {editable ? <Editable tag="span" value={tEndVal} onChange={v => set(['trendEndVal'], v)} /> : tEndVal}
+                </span>
+              </div>
+              <div className="tc-axis">
+                <span>{editable ? <Editable tag="span" value={tStartPer} onChange={v => set(['trendStartPeriod'], v)} /> : tStartPer}</span>
+                <span>{editable ? <Editable tag="span" value={tEndPer} onChange={v => set(['trendEndPeriod'], v)} /> : tEndPer}</span>
+              </div>
+            </div>
           </div>
           <Footer />
         </div></div>
@@ -250,7 +315,7 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
       const prog = steps.length > 1 ? (lastDone / (steps.length - 1)) * 100 : 0;
       return (
         <div className={rootCls}><div className="slide-pad flex-start">
-          {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+          {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
           {T(['title'], { tag: 'h2', className: 'title' })}
           <div className="timeline-wrap"><div className="timeline-rail">
             <div className="progress" style={{ width: prog + '%' }} />
@@ -276,10 +341,11 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
     }
 
     /* ---------------- MOCKUP ---------------- */
-    case 'mockup':
+    case 'mockup': {
+      const screen = imageSrc(data.screenImage);
       return (
         <div className={rootCls}><div className="slide-pad flex-start">
-          {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+          {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
           {T(['title'], { tag: 'h2', className: 'title' })}
           <div className="mockup-layout">
             <div className="mockup-text">
@@ -288,7 +354,7 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
               <div className="ml-list">
                 {data.list.map((li, i) => (
                   <div className="mli" key={i}>
-                    <img src={ICON_SRC('tick')} alt="" />
+                    <span className="mli-bullet" aria-hidden="true" />
                     <div>
                       <strong>{editable ? <Editable tag="span" value={li.lead} onChange={v => set(['list', i, 'lead'], v)} /> : li.lead}</strong>
                       {editable ? <Editable tag="span" value={li.rest} onChange={v => set(['list', i, 'rest'], v)} /> : li.rest}
@@ -298,42 +364,25 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
               </div>
             </div>
             <div className="mockup" role="img" aria-label="Product mockup">
-              <div className="mock-bar"><span className="tld" style={{ background: '#FF5F57' }} /><span className="tld" style={{ background: '#FEBC2E' }} /><span className="tld" style={{ background: '#28C840' }} /><div className="mock-url">app.covetrus.com / insights</div></div>
-              <div className="mock-body">
-                <div className="mock-side">
-                  <img className="ms-logo" src={LOGO_KO} alt="Covetrus" />
-                  {['Schedule', 'Patients', 'Rx', 'Inventory', 'Insights', 'Billing', 'Settings'].map(x => (
-                    <div className={'ms-item' + (x === 'Insights' ? ' active' : '')} key={x}><span className="ms-dot" />{x}</div>
-                  ))}
+              <div className="mock-bar"><span className="tld" style={{ background: '#FF5F57' }} /><span className="tld" style={{ background: '#FEBC2E' }} /><span className="tld" style={{ background: '#28C840' }} /><div className="mock-url">{editable ? <Editable tag="span" value={data.mockUrl ?? 'covetrus.com/mockup'} onChange={v => set(['mockUrl'], v)} /> : (data.mockUrl ?? 'covetrus.com/mockup')}</div></div>
+              {screen ? (
+                <div className={'mock-body screenshot' + pkCls} onClick={() => editable && pickImage(['screenImage'])} title={editable ? 'Click to change the screenshot' : undefined}>
+                  <img className="mock-shot" src={screen} alt="" />
                 </div>
-                <div className="mock-main">
-                  <div className="mm-title">Insights</div>
-                  <div className="mm-sub">Maplewood Animal Hospital · last 30 days</div>
-                  <div className="mm-stats">
-                    {[['Revenue', '$184k', '+12% vs peers'], ['Visits', '1,284', '+4% vs peers'], ['ARPU', '$143', '+8% vs peers']].map(s => (
-                      <div className="mm-stat" key={s[0]}><div className="ms-l">{s[0]}</div><div className="ms-v">{s[1]}</div><div className="ms-d">{s[2]}</div></div>
-                    ))}
-                  </div>
-                  <div className="mm-chart">
-                    <svg viewBox="0 0 380 128" preserveAspectRatio="none" style={{ width: '100%', height: '100%' }}>
-                      <defs><linearGradient id="mg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#27BDBE" stopOpacity="0.45" /><stop offset="100%" stopColor="#27BDBE" stopOpacity="0" /></linearGradient></defs>
-                      <path d="M0,90 L40,82 L80,86 L120,72 L160,64 L200,58 L240,48 L280,52 L320,38 L360,30 L380,18 L380,128 L0,128 Z" fill="url(#mg)" />
-                      <path d="M0,90 L40,82 L80,86 L120,72 L160,64 L200,58 L240,48 L280,52 L320,38 L360,30 L380,18" stroke="#27BDBE" strokeWidth="2" fill="none" />
-                      <path d="M0,98 L40,96 L80,92 L120,88 L160,90 L200,84 L240,82 L280,78 L320,76 L360,70 L380,68" stroke="#021660" strokeWidth="2" fill="none" strokeDasharray="3 3" />
-                    </svg>
-                  </div>
-                  <div className="mm-rows">
-                    {[['Wellness exam', '342', '$47,180', '+9%'], ['Vaccinations', '208', '$28,640', '+14%'], ['Dental cleaning', '96', '$38,400', '+6%']].map(r => (
-                      <div className="mm-row" key={r[0]}><span className="mr-name">{r[0]}</span><span>{r[1]}</span><span>{r[2]}</span><span className="pill">{r[3]}</span></div>
-                    ))}
+              ) : (
+                <div className={'mock-body shot-empty' + pkCls} onClick={() => editable && pickImage(['screenImage'])} title={editable ? 'Click to add a screenshot' : undefined}>
+                  <div className="shot-ph">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.8" /><path d="M21 16l-5-5L5 20" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    <span>Add a screenshot</span>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
           <Footer />
         </div></div>
       );
+    }
 
     /* ---------------- QUOTE ---------------- */
     case 'quote': {
@@ -360,23 +409,36 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
     }
 
     /* ---------------- COMPARISON ---------------- */
-    case 'comparison':
+    case 'comparison': {
+      const hlSet = new Set(Array.isArray(data.highlightCols)
+        ? data.highlightCols
+        : (data.highlightCol >= 1 ? [data.highlightCol] : []));
+      const badgeOf = (ci) => Array.isArray(data.badges)
+        ? (data.badges[ci] || '')
+        : (ci === data.highlightCol ? (data.highlightPill || '') : '');
+      const setBadge = (ci, v) => {
+        const arr = Array.isArray(data.badges)
+          ? data.badges.slice()
+          : data.columns.map((_, i) => (i === data.highlightCol ? (data.highlightPill || '') : ''));
+        arr[ci] = v;
+        set(['badges'], arr);
+      };
       return (
         <div className={rootCls}><div className="slide-pad flex-start">
-          {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+          {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
           {T(['title'], { tag: 'h2', className: 'title' })}
           <div className="comp-table"><table><thead><tr>
             {data.columns.map((c, ci) => (
-              <th key={ci} className={(ci === 0 ? 'feature-col' : '') + (ci === data.highlightCol ? ' highlight' : '')}>
+              <th key={ci} className={(ci === 0 ? 'feature-col' : '') + (hlSet.has(ci) ? ' highlight' : '')}>
                 {editable ? <Editable tag="span" value={c} onChange={v => set(['columns', ci], v)} /> : c}
-                {ci === data.highlightCol && data.highlightPill ? <span className="pill">{editable ? <Editable tag="span" value={data.highlightPill} onChange={v => set(['highlightPill'], v)} /> : data.highlightPill}</span> : null}
+                {hlSet.has(ci) && badgeOf(ci) ? <span className="pill">{editable ? <Editable tag="span" value={badgeOf(ci)} onChange={v => setBadge(ci, v)} /> : badgeOf(ci)}</span> : null}
               </th>
             ))}
           </tr></thead><tbody>
             {data.rows.map((row, ri) => (
               <tr key={ri}>
                 {row.map((cell, ci) => {
-                  const cls = ci === data.highlightCol ? 'highlight' : '';
+                  const cls = hlSet.has(ci) ? 'highlight' : '';
                   const isMark = cell === '✓' || cell === '—';
                   return (
                     <td key={ci} className={cls}>
@@ -392,26 +454,38 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
           <Footer />
         </div></div>
       );
+    }
 
     /* ---------------- TEAM ---------------- */
     case 'team':
       return (
         <div className={rootCls}><div className="slide-pad flex-start">
-          {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+          {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
           {T(['title'], { tag: 'h2', className: 'title' })}
-          <div className="team-grid">
+          <div className="team-grid" data-count={data.members.length}>
             {data.members.map((m, i) => {
-              const bg = imageBg(m.image);
+              const photo = imageSrc(m.image);
               return (
                 <div className="team-card" key={i}>
-                  <div className={'avatar' + pkCls} style={bg ? { backgroundImage: bg } : null} onClick={() => pickImage(['members', i, 'image'])} title={editable ? 'Click to add a photo' : undefined}>
-                    {!bg && (editable ? <Editable tag="span" value={m.initials} onChange={v => set(['members', i, 'initials'], v)} /> : m.initials)}
+                  <div className={'avatar' + pkCls + (photo ? '' : ' avatar-empty')} onClick={() => editable && pickImage(['members', i, 'image'])} title={editable ? 'Click to add a photo' : undefined}>
+                    {photo ? <PhotoLayer img={m.image} /> : (
+                      <div className="avatar-ph">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                          <rect x="3" y="4" width="18" height="16" rx="2" />
+                          <circle cx="8.5" cy="9.5" r="1.8" />
+                          <path d="M21 16l-5-5L5 20" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        <span>Add an image</span>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    {T(['members', i, 'role'], { className: 'tc-role' })}
-                    {T(['members', i, 'name'], { className: 'tc-name' })}
+                  <div className="tc-text">
+                    <div>
+                      {T(['members', i, 'role'], { className: 'tc-role' })}
+                      {T(['members', i, 'name'], { className: 'tc-name' })}
+                    </div>
+                    {T(['members', i, 'bio'], { tag: 'p', className: 'tc-bio', multiline: true })}
                   </div>
-                  {T(['members', i, 'bio'], { tag: 'p', className: 'tc-bio', multiline: true })}
                 </div>
               );
             })}
@@ -421,11 +495,44 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
       );
 
     /* ---------------- CLOSING ---------------- */
-    case 'closing':
+    case 'closing': {
+      const photo = imageSrc(data.image);
+      const rightArt = data.rightArt || (photo ? 'photo' : 'brand');
+      const showPhoto = rightArt === 'photo';
+      const brandRight = (
+        <div className="closing-right">
+          {Glow({ top: -200, right: -200 })}{Glow({ bottom: -200, left: -100 })}
+          <img src={BUG_KO} style={{ width: 420, position: 'relative', zIndex: 2 }} alt="" />
+        </div>
+      );
+      let right;
+      if (showPhoto && photo) {
+        right = (
+          <div className={'closing-right has-photo' + pkCls}
+            onClick={() => pickImage(['image'])} title={editable ? 'Click to change the image' : undefined}>
+            <PhotoLayer img={data.image} />
+          </div>
+        );
+      } else if (showPhoto && editable) {
+        right = (
+          <div className={'closing-right photo-empty' + pkCls} onClick={() => pickImage(['image'])} title="Click to add an image">
+            <div className="photo-ph">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <circle cx="8.5" cy="9.5" r="1.8" />
+                <path d="M21 16l-5-5L5 20" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span>Add an image</span>
+            </div>
+          </div>
+        );
+      } else {
+        right = brandRight;
+      }
       return (
         <div className={rootCls}><div className="closing">
           <div className="closing-left">
-            {T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
+            {data.showEyebrow !== false && T(['eyebrow'], { tag: 'p', className: 'eyebrow' })}
             {T(['title'], { tag: 'h2', className: 'display' })}
             {T(['lede'], { className: 'lede', multiline: true })}
             <div className="next-steps">
@@ -440,12 +547,10 @@ function SlideView({ slide, editable, onChange, requestIcon, requestImage, pageN
               ))}
             </div>
           </div>
-          <div className="closing-right">
-            {Glow({ top: -200, right: -200 })}{Glow({ bottom: -200, left: -100 })}
-            <img src={BUG_KO} style={{ width: 420, position: 'relative', zIndex: 2 }} alt="" />
-          </div>
+          {right}
         </div></div>
       );
+    }
 
     default:
       return <div className={rootCls}><div className="slide-pad"><p className="title">Unknown slide</p></div></div>;

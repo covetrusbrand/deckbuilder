@@ -38,6 +38,8 @@
   .tb-title:hover { border-color: var(--ui-line); }
   .tb-title:focus { outline: none; border-color: var(--ui-teal); background: #fff; }
   .tb-meta { font-size: 12.5px; color: var(--ui-muted); font-weight: 600; }
+  .save-nudge { font-family: inherit; font-size: 12.5px; font-weight: 800; color: #92500A; background: #FFF4E5; border: 1px solid #FFD9A8; border-radius: 999px; padding: 6px 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all .15s; }
+  .save-nudge:hover { background: #FFE9CC; border-color: #F0B968; }
   .tb-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
   .btn { font-family: inherit; font-weight: 800; font-size: 13.5px; border-radius: 8px; padding: 9px 16px; cursor: pointer; border: 1.5px solid transparent; transition: all .15s; }
@@ -48,10 +50,22 @@
   .btn.sm { padding: 7px 12px; font-size: 12.5px; }
 
   .menu { position: relative; }
-  .menu-pop { position: absolute; right: 0; top: calc(100% + 6px); background: #fff; border: 1px solid var(--ui-line); border-radius: 10px; box-shadow: 0 12px 32px rgba(2,22,96,0.15); padding: 6px; min-width: 200px; display: none; flex-direction: column; z-index: 30; }
-  .menu:hover .menu-pop { display: flex; }
+  .menu .btn.on { border-color: var(--ui-navy); }
+  .menu-pop { position: absolute; right: 0; top: calc(100% + 6px); background: #fff; border: 1px solid var(--ui-line); border-radius: 10px; box-shadow: 0 12px 32px rgba(2,22,96,0.15); padding: 6px; min-width: 200px; display: flex; flex-direction: column; z-index: 30; }
   .menu-pop button { text-align: left; background: none; border: 0; font-family: inherit; font-size: 13.5px; font-weight: 700; color: var(--ui-ink); padding: 10px 12px; border-radius: 7px; cursor: pointer; }
   .menu-pop button:hover { background: var(--ui-bg); }
+  .menu-sep { height: 1px; background: var(--ui-line); margin: 5px 4px; }
+  .menu-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ui-muted); padding: 4px 12px 6px; }
+  .deck-switch { max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  .deck-row { display: flex; align-items: center; border-radius: 7px; }
+  .deck-row.on { background: rgba(39,189,190,0.10); }
+  .deck-pick { flex: 1; display: flex; align-items: center; gap: 9px; text-align: left; background: none; border: 0; font-family: inherit; font-size: 13px; font-weight: 700; color: var(--ui-ink); padding: 9px 6px 9px 12px; border-radius: 7px; cursor: pointer; min-width: 0; }
+  .deck-pick:hover { background: var(--ui-bg); }
+  .deck-dot { color: var(--ui-teal); font-size: 10px; flex: none; }
+  .deck-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .deck-ct { font-size: 11px; font-weight: 800; color: var(--ui-muted); background: var(--ui-bg); border-radius: 999px; padding: 2px 8px; flex: none; }
+  .deck-del { width: 28px; flex: none; border: 0; background: none; color: var(--ui-muted); cursor: pointer; font-size: 12px; border-radius: 6px; padding: 8px 0; }
+  .deck-del:hover { background: #fff; color: var(--c-care-red, #ED3030); }
 
   /* ---------- main 3-col ---------- */
   .main { flex: 1; display: grid; grid-template-columns: 200px 1fr 320px; min-height: 0; }
@@ -86,12 +100,18 @@
   .inp { width: 100%; font-family: inherit; font-size: 13.5px; padding: 9px 11px; border: 1px solid var(--ui-line); border-radius: 8px; color: var(--ui-ink); }
   .inp:focus { outline: none; border-color: var(--ui-teal); }
   .inp.xs { padding: 6px 8px; font-size: 12.5px; }
+  .range { width: 100%; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 4px; background: var(--ui-line); outline: none; cursor: pointer; margin: 6px 0; }
+  .range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--ui-teal); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(2,22,96,0.3); cursor: pointer; }
+  .range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--ui-teal); border: 2px solid #fff; box-shadow: 0 1px 3px rgba(2,22,96,0.3); cursor: pointer; }
   .inp.num { -moz-appearance: textfield; }
   .seg { display: flex; gap: 4px; background: var(--ui-bg); padding: 4px; border-radius: 9px; }
   .seg button { flex: 1; border: 0; background: none; font-family: inherit; font-weight: 800; font-size: 12px; padding: 7px 6px; border-radius: 6px; cursor: pointer; color: var(--ui-muted); text-transform: capitalize; }
   .seg button.on { background: #fff; color: var(--ui-navy); box-shadow: 0 1px 3px rgba(2,22,96,0.12); }
 
   .sub-h { font-size: 12px; font-weight: 800; color: var(--ui-navy); margin: 18px 0 8px; }
+  .chk-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+  .chk { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 700; color: var(--ui-ink); cursor: pointer; }
+  .chk input { width: 16px; height: 16px; accent-color: var(--ui-teal); cursor: pointer; margin: 0; }
   .rowlist { display: flex; flex-direction: column; gap: 7px; }
   .rl-item { display: flex; align-items: flex-start; gap: 6px; background: var(--ui-bg); border-radius: 8px; padding: 8px 8px 8px 10px; }
   .rl-body { flex: 1; min-width: 0; }
@@ -140,6 +160,9 @@
   .img-cell .swatch { width: 100%; aspect-ratio: 16/10; border-radius: 10px; border: 1px solid rgba(0,0,0,0.08); }
   .img-cell:hover .swatch { outline: 3px solid var(--ui-teal); outline-offset: 2px; }
   .img-cell span { font-size: 11.5px; font-weight: 700; color: var(--ui-muted); }
+  .img-cell .upload-swatch { display: flex; align-items: center; justify-content: center; border: 2px dashed var(--ui-line); background: var(--ui-bg); color: var(--ui-teal); }
+  .img-cell:hover .upload-swatch { border-color: var(--ui-teal); background: rgba(39,189,190,0.06); }
+  .upload-swatch .up-ic { width: 52px; height: 52px; }
   .upload-zone { border: 2px dashed var(--ui-line); border-radius: 14px; padding: 44px; text-align: center; cursor: pointer; transition: all .15s; }
   .upload-zone:hover { border-color: var(--ui-teal); background: rgba(39,189,190,0.04); }
   .up-ic { font-size: 34px; color: var(--ui-teal); }

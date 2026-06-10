@@ -84,39 +84,35 @@ function IconPicker({ onPick, onClose }) {
 
 /* Image picker — curated gallery + upload, plus "remove" */
 function ImagePicker({ onPick, onClose, allowNone = true }) {
-  const [tab, setTab] = useState('gallery');
   const fileRef = useRef(null);
   const onFile = (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
     const r = new FileReader();
-    r.onload = () => { onPick({ kind: 'upload', value: r.result }); onClose(); };
+    r.onload = () => { onPick({ kind: 'upload', src: r.result }); onClose(); };
     r.readAsDataURL(f);
   };
   return (
     <Modal title="Choose an image" onClose={onClose} wide>
-      <div className="tabs">
-        <button className={tab === 'gallery' ? 'tab on' : 'tab'} onClick={() => setTab('gallery')}>Brand gallery</button>
-        <button className={tab === 'upload' ? 'tab on' : 'tab'} onClick={() => setTab('upload')}>Upload</button>
-      </div>
-      {tab === 'gallery' && (
-        <div className="img-grid">
-          {IMAGE_LIBRARY.map(im => (
-            <button key={im.id} className="img-cell" onClick={() => { onPick({ kind: 'preset', value: im.css, id: im.id }); onClose(); }}>
-              <span className="swatch" style={{ background: im.css }} />
-              <span>{im.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      {tab === 'upload' && (
-        <div className="upload-zone" onClick={() => fileRef.current && fileRef.current.click()}>
+      <div className="img-grid">
+        {IMAGE_LIBRARY.map(im => (
+          <button key={im.id} className="img-cell" onClick={() => { onPick({ kind: 'preset', src: im.src, id: im.id }); onClose(); }}>
+            <span className="swatch" style={{ backgroundImage: `url("${im.src}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />
+            <span>{im.label}</span>
+          </button>
+        ))}
+        <button className="img-cell" onClick={() => fileRef.current && fileRef.current.click()}>
           <input ref={fileRef} type="file" accept="image/*" hidden onChange={onFile} />
-          <div className="up-ic">⤓</div>
-          <div className="up-title">Click to upload an image</div>
-          <div className="up-sub">PNG or JPG. Stored in your browser with this deck.</div>
-        </div>
-      )}
+          <span className="swatch upload-swatch">
+            <svg className="up-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M12 16V4" />
+              <path d="M7 9l5-5 5 5" />
+              <path d="M5 20h14" />
+            </svg>
+          </span>
+          <span>Upload</span>
+        </button>
+      </div>
       {allowNone && (
         <div className="modal-foot">
           <button className="btn ghost" onClick={() => { onPick({ kind: 'none' }); onClose(); }}>Remove image</button>
